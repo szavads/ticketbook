@@ -1,0 +1,36 @@
+# Doxyfile 1.9 — ticketbook
+
+PROJECT_NAME           = "ticketbook"
+PROJECT_NUMBER         = "1.0.0"
+PROJECT_BRIEF          = "Movie ticket booking backend service"
+
+OUTPUT_DIRECTORY       = docs
+
+# Source files to document
+INPUT                  = include src README.md
+FILE_PATTERNS          = *.h *.cpp *.md
+RECURSIVE              = NO
+
+# Extract everything, even undocumented symbols
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+
+# Use README as the main page
+USE_MDFILE_AS_MAINPAGE = README.md
+
+# Output formats
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+
+# Style
+HTML_TIMESTAMP         = NO
+
+# Misc
+QUIET                  = YES
+WARNINGS               = YES
+WARN_NO_PARAMDOC       = YES
+JAVADOC_AUTOBRIEF      = YES
+
+# No Graphviz required
+HAVE_DOT               = NO
