@@ -48,14 +48,21 @@ inline std::string indexToSeatId(int idx) {
 struct ShowingData {
     /// Booked flags: index 0 → "a1", index 19 → "a20".
     std::array<bool, SEATS_PER_THEATER> booked{};
+
+    /// Guards booked[] only. The ShowingData object itself is never
+    /// moved or erased after construction, so taking a pointer/reference
+    /// to it and then locking is safe without a global map lock.
+    mutable std::shared_mutex mutex;
 };
 
 struct BookingService::Impl {
-    mutable std::shared_mutex mutex;
-
+    // Immutable after construction — populated once in seedData(), never modified.
+    // Safe to read from any thread without a lock.
     std::vector<Movie>   movies;
     std::vector<Theater> theaters;
 
+    // Keys are immutable after construction (same guarantee as movies/theaters).
+    // Only ShowingData::booked[] is mutable and requires synchronisation.
     /// Key: makeKey(movieId, theaterId)  →  ShowingData
     std::unordered_map<uint64_t, ShowingData> showings;
 
@@ -75,18 +82,19 @@ void BookingService::Impl::seedData() {
         {3, "Grand Cinema",      "789 Grand Blvd"}
     };
 
-    // Inception plays at CineMax and Movieplex
-    showings.emplace(makeKey(1, 1), ShowingData{});
-    showings.emplace(makeKey(1, 2), ShowingData{});
+    // try_emplace constructs ShowingData in-place — required because
+    // ShowingData contains a std::shared_mutex which is not movable.
+    showings.try_emplace(makeKey(1, 1));
+    showings.try_emplace(makeKey(1, 2));
 
     // The Dark Knight plays at CineMax and Grand
-    showings.emplace(makeKey(2, 1), ShowingData{});
-    showings.emplace(makeKey(2, 3), ShowingData{});
+    showings.try_emplace(makeKey(2, 1));
+    showings.try_emplace(makeKey(2, 3));
 
     // Interstellar plays at all three theaters
-    showings.emplace(makeKey(3, 1), ShowingData{});
-    showings.emplace(makeKey(3, 2), ShowingData{});
-    showings.emplace(makeKey(3, 3), ShowingData{});
+    showings.try_emplace(makeKey(3, 1));
+    showings.try_emplace(makeKey(3, 2));
+    showings.try_emplace(makeKey(3, 3));
 }
 
 // =============================================================================
@@ -102,12 +110,12 @@ BookingService::BookingService()
 BookingService::~BookingService() = default;
 
 std::vector<Movie> BookingService::getMovies() const {
-    std::shared_lock lock(m_impl->mutex);
+    // movies is immutable after construction — no lock needed.
     return m_impl->movies;
 }
 
 std::vector<Theater> BookingService::getTheatersForMovie(uint32_t movieId) const {
-    std::shared_lock lock(m_impl->mutex);
+    // theaters and showings keys are immutable after construction — no lock needed.
     std::vector<Theater> result;
     for (const auto& theater : m_impl->theaters) {
         if (m_impl->showings.count(makeKey(movieId, theater.id))) {
@@ -120,10 +128,12 @@ std::vector<Theater> BookingService::getTheatersForMovie(uint32_t movieId) const
 std::vector<std::string> BookingService::getAvailableSeats(
     uint32_t movieId, uint32_t theaterId) const
 {
-    std::shared_lock lock(m_impl->mutex);
+    // showings keys are immutable — find() needs no global lock.
     const auto it = m_impl->showings.find(makeKey(movieId, theaterId));
     if (it == m_impl->showings.end()) return {};
 
+    // booked[] is mutable — use a shared (read) lock on this showing only.
+    std::shared_lock lock(it->second.mutex);
     std::vector<std::string> seats;
     for (int i = 0; i < SEATS_PER_THEATER; ++i) {
         if (!it->second.booked[i]) {
@@ -142,15 +152,17 @@ BookingResult BookingService::bookSeats(
         return {BookingStatus::InvalidSeat, "No seats specified.", {}};
     }
 
-    std::unique_lock lock(m_impl->mutex);
-
+    // showings keys are immutable — find() needs no global lock.
     auto it = m_impl->showings.find(makeKey(movieId, theaterId));
     if (it == m_impl->showings.end()) {
         return {BookingStatus::ShowingNotFound,
                 "No showing found for the given movie and theater.", {}};
     }
 
+    // Lock only this showing's mutex exclusively (write lock).
+    // Concurrent bookings in other showings proceed in parallel.
     ShowingData& showing = it->second;
+    std::unique_lock lock(showing.mutex);
 
     // ── Phase 1: validate every seat before touching any ─────────────────────
     std::vector<int> indices;
