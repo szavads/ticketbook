@@ -36,7 +36,7 @@ jobs:
         run: conan install . --output-folder=build --build=missing -s build_type=${{ matrix.build_type }}
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        run: cmake -B build "-DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }}
