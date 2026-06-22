@@ -18,9 +18,17 @@ namespace ticketbook {
  *
  * ### Thread safety
  * All public methods are safe to call concurrently from multiple threads.
- * Read operations (`getMovies`, `getTheatersForMovie`, `getAvailableSeats`)
- * acquire a shared (non-exclusive) lock and therefore do not block each other.
- * Write operations (`bookSeats`) acquire an exclusive lock.
+ *
+ * `getMovies` and `getTheatersForMovie` access only immutable data (populated
+ * once at construction) and therefore require no synchronisation at all.
+ *
+ * `getAvailableSeats` acquires a **shared (read) lock** scoped to the requested
+ * showing only, so concurrent seat queries for any showings proceed in parallel.
+ *
+ * `bookSeats` acquires an **exclusive lock** scoped to the requested showing.
+ * Bookings in different showings are fully concurrent; only bookings targeting
+ * the same showing are serialised.  This single-level locking scheme is
+ * deadlock-free by construction.
  *
  * ### Atomicity
  * `bookSeats` is all-or-nothing: every requested seat is validated before any
