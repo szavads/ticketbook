@@ -113,13 +113,13 @@ Or run the test binary directly:
 .\build\tests\Release\ticketbook_tests.exe
 ```
 
-19 tests across three areas:
+21 tests across three areas:
 
 | Group | Tests | What is covered |
 |---|---|---|
 | Data queries | 8 | `getMovies`, `getTheatersForMovie`, `getAvailableSeats` — happy path and not-found cases |
 | Booking logic | 8 | Single/multi seat booking, atomicity, already-booked, invalid ID, duplicate in request, no showing |
-| Concurrency | 2 | 20 threads racing for the same seat (exactly 1 wins); 20 threads booking distinct seats (all 20 succeed) |
+| Concurrency | 4 | 20 threads racing for the same seat (exactly 1 wins); 20 threads booking distinct seats (all succeed); 16 concurrent readers don't block each other; reader and writer on different showings run in parallel |
 
 ## API Documentation (Doxygen)
 
@@ -157,14 +157,28 @@ CLI  (src/main.cpp)
 BookingService          ← public API, pImpl hides implementation
        │
        ▼
-In-memory store         ← unordered_map guarded by std::shared_mutex
+In-memory store         ← movies, theaters, showings (keys immutable after init)
+       │
+       ▼
+ShowingData             ← per-showing shared_mutex guards booked[] only
 ```
 
-**Reads** (`getMovies`, `getTheatersForMovie`, `getAvailableSeats`) acquire a
-**shared lock** and can execute in parallel.
+### Threading model
 
-**Writes** (`bookSeats`) acquire an **exclusive lock**.  The booking follows a
-two-phase protocol within that lock:
+| Operation | Lock |
+|---|---|
+| `getMovies` | none — data is immutable after construction |
+| `getTheatersForMovie` | none — data is immutable after construction |
+| `getAvailableSeats` | `shared_lock` on the specific `ShowingData` |
+| `bookSeats` | `unique_lock` on the specific `ShowingData` |
+
+Because `movies`, `theaters`, and the keys of `showings` are populated once at
+construction and never modified, concurrent reads of that data require no
+synchronisation at all.  Only `ShowingData::booked[]` changes at runtime, so
+the mutex lives there — one per showing.  Bookings in different showings
+proceed in parallel with zero contention.
+
+`bookSeats` follows a two-phase protocol inside the exclusive lock:
 1. **Validate** — check every requested seat before touching any.
 2. **Commit** — mark all seats as booked.
 
@@ -172,8 +186,8 @@ This guarantees all-or-nothing semantics without a database transaction.
 
 ### Design decisions
 
-**`std::shared_mutex` over plain `std::mutex`**  
-Read operations (`getMovies`, `getTheatersForMovie`, `getAvailableSeats`) hold a shared lock and run in parallel. Only `bookSeats` takes an exclusive lock. This is the right trade-off for a read-heavy workload where multiple UI clients browse movies simultaneously.
+**Per-showing `std::shared_mutex` with immutable catalogue**  
+`movies`, `theaters`, and the keys of `showings` are written once at startup and never change — they need no lock.  Only `ShowingData::booked[]` is mutable, so each showing carries its own `shared_mutex`.  Reads of available seats acquire a shared lock on that one showing; writes acquire an exclusive lock on the same object.  Bookings in different showings never compete for the same mutex.
 
 **pImpl (Pointer to Implementation)**  
 The `BookingService` header exposes zero implementation details — no STL containers, no mutex, no internal types. Consumers depend only on `BookingService.h` and `Models.h`. Changing the internal storage structure requires recompiling only `BookingService.cpp`, not every translation unit that includes the header.
@@ -188,11 +202,17 @@ All seats are checked before any seat is marked. If one seat in a multi-seat req
 
 ## Reflection
 
-**Most interesting** — Designing correct concurrent booking semantics without a
-database.  Using `std::shared_mutex` (shared reads, exclusive writes) combined
-with a validate-then-commit pattern delivers no-overbook guarantees with minimal
-contention.  Getting the atomicity right — especially handling the "duplicate
-seat in one request" edge case — was the most satisfying part of the exercise.
+**Most interesting** — Designing a deadlock-free, fine-grained concurrency model
+without a database.  The key insight is that the movie and theater catalogue is
+immutable after construction, which eliminates the need for any lock in
+`getMovies` and `getTheatersForMovie` entirely.  Where mutable state exists
+(`booked[]`), a `shared_mutex` is placed on each `ShowingData` individually:
+`getAvailableSeats` acquires a shared (read) lock, allowing concurrent reads
+across all showings with zero contention, while `bookSeats` acquires an
+exclusive lock scoped to that one showing only.  The result is a single-level
+lock hierarchy with no possibility of deadlock, combined with an all-or-nothing
+validate-then-commit protocol that prevents over-bookings under any concurrency
+pattern.
 
 **Most cumbersome** — Cross-platform build chain setup.  Conan 2's CMake
 toolchain injection works well once configured, but the difference between

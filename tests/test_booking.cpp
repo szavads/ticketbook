@@ -186,3 +186,55 @@ TEST_F(BookingServiceTest, ConcurrentBookingDistinctSeatsAllSucceed) {
     EXPECT_EQ(successCount.load(), SEATS_PER_THEATER);
     EXPECT_TRUE(service.getAvailableSeats(1, 1).empty());
 }
+
+TEST_F(BookingServiceTest, ConcurrentReadsDoNotBlockEachOther) {
+    // Pre-book a few seats so getAvailableSeats has something to iterate.
+    service.bookSeats(1, 1, {"a1", "a2", "a3"});
+
+    constexpr int NUM_READERS = 16;
+    std::atomic<int> completedReaders{0};
+
+    std::vector<std::thread> threads;
+    threads.reserve(NUM_READERS);
+    for (int i = 0; i < NUM_READERS; ++i) {
+        threads.emplace_back([&]() {
+            const auto seats = service.getAvailableSeats(1, 1);
+            EXPECT_EQ(seats.size(), static_cast<size_t>(SEATS_PER_THEATER - 3));
+            ++completedReaders;
+        });
+    }
+    for (auto& t : threads) t.join();
+
+    // All readers must have completed — none was starved or deadlocked.
+    EXPECT_EQ(completedReaders.load(), NUM_READERS);
+}
+
+TEST_F(BookingServiceTest, ConcurrentReadAndWriteDifferentShowings) {
+    // Reader on showing (1,1) and writer on showing (3,3) must not block
+    // each other — they hold locks on different ShowingData objects.
+    std::atomic<bool> readerDone{false};
+    std::atomic<bool> writerDone{false};
+
+    std::thread reader([&]() {
+        for (int i = 0; i < 100; ++i)
+            service.getAvailableSeats(1, 1);
+        readerDone = true;
+    });
+
+    std::thread writer([&]() {
+        for (int i = 1; i <= SEATS_PER_THEATER; ++i)
+            service.bookSeats(3, 3, {"a" + std::to_string(i)});
+        writerDone = true;
+    });
+
+    reader.join();
+    writer.join();
+
+    EXPECT_TRUE(readerDone.load());
+    EXPECT_TRUE(writerDone.load());
+    // Showing (1,1) untouched — all seats still available.
+    EXPECT_EQ(service.getAvailableSeats(1, 1).size(),
+              static_cast<size_t>(SEATS_PER_THEATER));
+    // Showing (3,3) fully booked.
+    EXPECT_TRUE(service.getAvailableSeats(3, 3).empty());
+}
