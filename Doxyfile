@@ -23,9 +23,6 @@ USE_MDFILE_AS_MAINPAGE = README.md
 GENERATE_HTML          = YES
 GENERATE_LATEX         = NO
 
-# Style
-HTML_TIMESTAMP         = NO
-
 # Misc
 QUIET                  = YES
 WARNINGS               = YES

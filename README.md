@@ -18,7 +18,7 @@ Thread-safe, in-memory, no external database required.
 |------|---------|
 | CMake | ≥ 3.15 |
 | C++ compiler | GCC 9 / Clang 10 / MSVC 2019 or later (C++17) |
-| Python | ≥ 3.8 |
+| Python | ≥ 3.8 | required only to install Conan via pip |
 | Conan | ≥ 2.0 |
 
 Install Conan and auto-detect your compiler profile:
