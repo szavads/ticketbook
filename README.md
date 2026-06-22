@@ -64,10 +64,43 @@ docker run -it ticketbook
 The interactive menu walks you through selecting a movie, a theater,
 viewing available seats, and booking them.
 
+### Example session
+
+```
+========================================
+     Movie Ticket Booking System
+========================================
+----------------------------------------
+ Movies Now Playing
+----------------------------------------
+  [1] Inception
+  [2] The Dark Knight
+  [3] Interstellar
+  [0] Quit
+Select movie: 1
+----------------------------------------
+ Theaters Showing This Movie
+----------------------------------------
+  [1] CineMax Downtown  —  123 Main St
+  [2] Movieplex North   —  456 North Ave
+  [0] Back
+Select theater: 1
+----------------------------------------
+ Available Seats
+----------------------------------------
+  a1  a2  a3  a4  a5  a6  a7  a8  a9  a10
+  a11  a12  a13  a14  a15  a16  a17  a18  a19  a20
+  Book seats? [y/n]: y
+  Seats (space-separated, e.g. a1 a2 a5): a3 a7
+----------------------------------------
+  Seats booked successfully.
+  Booked: a3 a7
+```
+
 ## Tests
 
 ```sh
-cd build && ctest --output-on-failure
+ctest --test-dir build --build-config Release --output-on-failure
 ```
 
 Or run the test binary directly:
@@ -79,6 +112,14 @@ Or run the test binary directly:
 # Windows
 .\build\tests\Release\ticketbook_tests.exe
 ```
+
+19 tests across three areas:
+
+| Group | Tests | What is covered |
+|---|---|---|
+| Data queries | 8 | `getMovies`, `getTheatersForMovie`, `getAvailableSeats` — happy path and not-found cases |
+| Booking logic | 8 | Single/multi seat booking, atomicity, already-booked, invalid ID, duplicate in request, no showing |
+| Concurrency | 2 | 20 threads racing for the same seat (exactly 1 wins); 20 threads booking distinct seats (all 20 succeed) |
 
 ## API Documentation (Doxygen)
 
@@ -128,6 +169,20 @@ two-phase protocol within that lock:
 2. **Commit** — mark all seats as booked.
 
 This guarantees all-or-nothing semantics without a database transaction.
+
+### Design decisions
+
+**`std::shared_mutex` over plain `std::mutex`**  
+Read operations (`getMovies`, `getTheatersForMovie`, `getAvailableSeats`) hold a shared lock and run in parallel. Only `bookSeats` takes an exclusive lock. This is the right trade-off for a read-heavy workload where multiple UI clients browse movies simultaneously.
+
+**pImpl (Pointer to Implementation)**  
+The `BookingService` header exposes zero implementation details — no STL containers, no mutex, no internal types. Consumers depend only on `BookingService.h` and `Models.h`. Changing the internal storage structure requires recompiling only `BookingService.cpp`, not every translation unit that includes the header.
+
+**`makeKey(movieId, theaterId)` — packing two `uint32_t` into one `uint64_t`**  
+Using a single integer key in `unordered_map` is faster than `std::pair<uint32_t, uint32_t>` because it avoids a custom hasher and compares in one instruction. The bit shift `(movieId << 32) | theaterId` is lossless since both IDs fit in 32 bits.
+
+**Validate-then-commit booking**  
+All seats are checked before any seat is marked. If one seat in a multi-seat request is taken, no seats change — the operation is all-or-nothing. This is equivalent to a serialisable database transaction, achieved here with a single exclusive lock scope.
 
 ---
 
