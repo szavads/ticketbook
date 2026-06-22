@@ -159,14 +159,18 @@ ticketbook/
 
 ```
 CLI  (src/main.cpp)
-       │
+       │  user selects movie → theater → seats
        ▼
 BookingService          ← public API, pImpl hides implementation
        │
-       ▼
-In-memory store         ← movies, theaters, showings (keys immutable after init)
+       ├── getMovies() / getTheatersForMovie()   → no lock (immutable data)
        │
-       ▼
+       ├── getAvailableSeats()                   → shared_lock on ShowingData
+       │
+       └── bookSeats()                           → unique_lock on ShowingData
+              │  1. validate all seats (atomic check)
+              │  2. commit all seats  (all-or-nothing)
+              ▼
 ShowingData             ← per-showing shared_mutex guards booked[] only
 ```
 
