@@ -1,5 +1,7 @@
 # ticketbook
 
+[![CI](https://github.com/szavads/ticketbook/actions/workflows/ci.yml/badge.svg)](https://github.com/szavads/ticketbook/actions/workflows/ci.yml)
+
 A C++17 backend service for online movie ticket booking.
 Thread-safe, in-memory, no external database required.
 
