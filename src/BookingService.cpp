@@ -56,34 +56,34 @@ struct ShowingData {
 };
 
 struct BookingService::Impl {
-    // Immutable after construction — populated once in seedData(), never modified.
+    // Immutable after construction — const enforced by the compiler.
     // Safe to read from any thread without a lock.
-    std::vector<Movie>   movies;
-    std::vector<Theater> theaters;
+    const std::vector<Movie>   movies;
+    const std::vector<Theater> theaters;
 
     // Keys are immutable after construction (same guarantee as movies/theaters).
     // Only ShowingData::booked[] is mutable and requires synchronisation.
     /// Key: makeKey(movieId, theaterId)  →  ShowingData
     std::unordered_map<uint64_t, ShowingData> showings;
 
-    void seedData();
+    Impl();
 };
 
-void BookingService::Impl::seedData() {
-    movies = {
-        {1, "Inception"},
-        {2, "The Dark Knight"},
-        {3, "Interstellar"}
-    };
-
-    theaters = {
-        {1, "CineMax Downtown",  "123 Main St"},
-        {2, "Movieplex North",   "456 North Ave"},
-        {3, "Grand Cinema",      "789 Grand Blvd"}
-    };
-
+BookingService::Impl::Impl()
+    : movies({
+          {1, "Inception"},
+          {2, "The Dark Knight"},
+          {3, "Interstellar"}
+      })
+    , theaters({
+          {1, "CineMax Downtown",  "123 Main St"},
+          {2, "Movieplex North",   "456 North Ave"},
+          {3, "Grand Cinema",      "789 Grand Blvd"}
+      })
+{
     // try_emplace constructs ShowingData in-place — required because
     // ShowingData contains a std::shared_mutex which is not movable.
+    // Inception plays at CineMax and Movieplex
     showings.try_emplace(makeKey(1, 1));
     showings.try_emplace(makeKey(1, 2));
 
@@ -104,7 +104,6 @@ void BookingService::Impl::seedData() {
 BookingService::BookingService()
     : m_impl(std::make_unique<Impl>())
 {
-    m_impl->seedData();
 }
 
 BookingService::~BookingService() = default;
