@@ -113,13 +113,13 @@ Or run the test binary directly:
 .\build\tests\Release\ticketbook_tests.exe
 ```
 
-21 tests across three areas:
+22 tests across three areas:
 
 | Group | Tests | What is covered |
 |---|---|---|
 | Data queries | 8 | `getMovies`, `getTheatersForMovie`, `getAvailableSeats` — happy path and not-found cases |
 | Booking logic | 8 | Single/multi seat booking, atomicity, already-booked, invalid ID, duplicate in request, no showing |
-| Concurrency | 4 | 20 threads racing for the same seat (exactly 1 wins); 20 threads booking distinct seats (all succeed); 16 concurrent readers don't block each other; reader and writer on different showings run in parallel |
+| Concurrency | 5 | 20 threads racing for the same seat (exactly 1 wins); 20 threads booking distinct seats (all succeed); 16 concurrent readers don't block each other; reader and writer on different showings run in parallel; stress test — 12 threads × 50 iterations targeting 4 hot seats with mixed reads/writes, verifies `successCount == bookedCount` (no over-booking) |
 
 ## API Documentation (Doxygen)
 

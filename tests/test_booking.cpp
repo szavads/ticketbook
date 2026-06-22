@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <random>   // note: std::mt19937 seeded with a fixed value is used below for deterministic, reproducible sequence, no flaky tests
 #include <string>
 #include <thread>
 #include <vector>
@@ -237,4 +238,61 @@ TEST_F(BookingServiceTest, ConcurrentReadAndWriteDifferentShowings) {
               static_cast<size_t>(SEATS_PER_THEATER));
     // Showing (3,3) fully booked.
     EXPECT_TRUE(service.getAvailableSeats(3, 3).empty());
+}
+
+TEST_F(BookingServiceTest, StressHighContentionNoOverbooking) {
+    // All threads target the same narrow set of seats (a1..a4) to maximise
+    // mutex contention.  Each thread also interleaves reads (getAvailableSeats)
+    // with booking attempts, mirroring real-world mixed workloads.
+    //
+    // Fixed seed makes the test deterministic and reproducible.
+    //
+    // Invariant: total successful bookings == number of seats marked booked.
+
+    constexpr int    NUM_THREADS    = 12;
+    constexpr int    ITERATIONS     = 50;
+    constexpr uint32_t MOVIE_ID     = 1;
+    constexpr uint32_t THEATER_ID   = 1;
+    // Contested seats — narrow range to guarantee frequent lock collisions.
+    const std::vector<std::string> hotSeats = {"a1", "a2", "a3", "a4"};
+
+    std::atomic<int> totalSuccesses{0};
+
+    std::vector<std::thread> threads;
+    threads.reserve(NUM_THREADS);
+
+    for (int t = 0; t < NUM_THREADS; ++t) {
+        threads.emplace_back([&, t]() {
+            // Each thread gets its own PRNG seeded deterministically.
+            std::mt19937 rng(42 + t);
+            std::uniform_int_distribution<int> seatDist(
+                0, static_cast<int>(hotSeats.size()) - 1);
+            std::bernoulli_distribution doRead(0.3); // 30% reads, 70% writes
+
+            for (int i = 0; i < ITERATIONS; ++i) {
+                if (doRead(rng)) {
+                    // Read path — exercises shared_lock under contention.
+                    service.getAvailableSeats(MOVIE_ID, THEATER_ID);
+                } else {
+                    // Write path — all threads compete for the same 4 seats.
+                    const auto& seat = hotSeats[seatDist(rng)];
+                    if (service.bookSeats(MOVIE_ID, THEATER_ID, {seat}).status
+                            == BookingStatus::Success) {
+                        ++totalSuccesses;
+                    }
+                }
+            }
+        });
+    }
+
+    for (auto& th : threads) th.join();
+
+    // Count how many of the hot seats are actually marked booked.
+    const auto available = service.getAvailableSeats(MOVIE_ID, THEATER_ID);
+    const int bookedCount = SEATS_PER_THEATER - static_cast<int>(available.size());
+
+    // Core invariant: every reported success corresponds to a real booking.
+    EXPECT_EQ(totalSuccesses.load(), bookedCount);
+    // At most 4 seats could have been booked (only hotSeats were targeted).
+    EXPECT_LE(bookedCount, static_cast<int>(hotSeats.size()));
 }
