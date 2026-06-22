@@ -62,9 +62,20 @@ The CLI binary is placed at:
 
 # Windows
 .\build\Release\ticketbook.exe
+```
 
-# Docker
+## Docker
+
+The included `Dockerfile` uses a **multi-stage build** to keep the final image
+small: a `builder` stage installs the full toolchain (GCC, CMake, Conan) and
+compiles the binary; a lean `runtime` stage copies only the resulting executable
+and the minimal C++ runtime library.
+
+```sh
+# Build the image (takes a few minutes on first run — Conan fetches dependencies)
 docker build -t ticketbook .
+
+# Run interactively (-it is required for the CLI to receive keyboard input)
 docker run -it ticketbook
 ```
 
@@ -230,5 +241,5 @@ platforms.  Single-config generators (Unix Makefiles on Linux/macOS) place the
 binary at `build/ticketbook`; MSVC's multi-config generator puts it at
 `build/Release/ticketbook.exe`.  The project handles this pragmatically: both
 paths are documented in the README, the CI matrix validates the build on
-Ubuntu 22.04 and Windows latest independently, and the Dockerfile targets Linux
+Ubuntu 22.04 and Windows independently, and the Dockerfile targets Linux
 as is standard for containerised services.
