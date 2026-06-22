@@ -2,6 +2,13 @@
 
 [![CI](https://github.com/szavads/ticketbook/actions/workflows/ci.yml/badge.svg)](https://github.com/szavads/ticketbook/actions/workflows/ci.yml)
 
+The CI pipeline runs three jobs on every push:
+| Job | Platform | What it does |
+|---|---|---|
+| `build-and-test` | Ubuntu 22.04 | Conan install → CMake build → 22 unit tests |
+| `build-and-test` | Windows latest (MSVC) | Conan install → CMake build → 22 unit tests |
+| `docs` | Ubuntu 22.04 | Doxygen — verifies API docs generate without errors |
+
 A C++17 backend service for online movie ticket booking.
 Thread-safe, in-memory, no external database required.
 
