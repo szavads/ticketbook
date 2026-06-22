@@ -225,8 +225,10 @@ lock hierarchy with no possibility of deadlock, combined with an all-or-nothing
 validate-then-commit protocol that prevents over-bookings under any concurrency
 pattern.
 
-**Most cumbersome** — Cross-platform build chain setup.  Conan 2's CMake
-toolchain injection works well once configured, but the difference between
-single-config generators (Makefiles / Ninja) and multi-config generators (MSVC)
-means binary output paths differ, which requires extra care in documentation and
-Docker scripts.
+**Most cumbersome** — Managing CMake's generator-dependent output paths across
+platforms.  Single-config generators (Unix Makefiles on Linux/macOS) place the
+binary at `build/ticketbook`; MSVC's multi-config generator puts it at
+`build/Release/ticketbook.exe`.  The project handles this pragmatically: both
+paths are documented in the README, the CI matrix validates the build on
+Ubuntu 22.04 and Windows latest independently, and the Dockerfile targets Linux
+as is standard for containerised services.
