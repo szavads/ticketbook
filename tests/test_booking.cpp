@@ -216,8 +216,10 @@ TEST_F(BookingServiceTest, ConcurrentReadAndWriteDifferentShowings) {
     std::atomic<bool> readerDone{false};
     std::atomic<bool> writerDone{false};
 
+    constexpr int READ_ITERATIONS = 100;
+
     std::thread reader([&]() {
-        for (int i = 0; i < 100; ++i)
+        for (int i = 0; i < READ_ITERATIONS; ++i)
             service.getAvailableSeats(1, 1);
         readerDone = true;
     });
