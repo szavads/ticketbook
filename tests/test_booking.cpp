@@ -147,6 +147,36 @@ TEST_F(BookingServiceTest, BookingForNonExistentShowingFails) {
               BookingStatus::ShowingNotFound);
 }
 
+TEST_F(BookingServiceTest, AtomicityNoneBookedWhenInvalidSeatInList) {
+    // a99 is invalid — the whole request must be rejected atomically.
+    const auto result = service.bookSeats(1, 1, {"a2", "a99", "a3"});
+    EXPECT_EQ(result.status, BookingStatus::InvalidSeat);
+
+    // a2 and a3 must still be available.
+    const auto seats = service.getAvailableSeats(1, 1);
+    EXPECT_NE(std::find(seats.begin(), seats.end(), "a2"), seats.end());
+    EXPECT_NE(std::find(seats.begin(), seats.end(), "a3"), seats.end());
+}
+
+TEST_F(BookingServiceTest, BookingAllSeatsLeavesTheaterEmpty) {
+    for (int i = 1; i <= SEATS_PER_THEATER; ++i)
+        service.bookSeats(1, 1, {"a" + std::to_string(i)});
+
+    EXPECT_TRUE(service.getAvailableSeats(1, 1).empty());
+}
+
+TEST_F(BookingServiceTest, TheatersForMovieHaveCorrectFields) {
+    const auto theaters = service.getTheatersForMovie(1); // Inception → 2 theaters
+    ASSERT_EQ(theaters.size(), 2u);
+
+    // Every returned theater must have a non-empty name and location.
+    for (const auto& t : theaters) {
+        EXPECT_NE(t.id, 0u);
+        EXPECT_FALSE(t.name.empty());
+        EXPECT_FALSE(t.location.empty());
+    }
+}
+
 // =============================================================================
 // Thread safety
 // =============================================================================

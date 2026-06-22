@@ -5,8 +5,8 @@
 The CI pipeline runs three jobs on every push:
 | Job | Platform | What it does |
 |---|---|---|
-| `build-and-test` | Ubuntu 22.04 | Conan install → CMake build → 22 unit tests |
-| `build-and-test` | Windows latest (MSVC) | Conan install → CMake build → 22 unit tests |
+| `build-and-test` | Ubuntu 22.04 | Conan install → CMake build → 25 unit tests |
+| `build-and-test` | Windows latest (MSVC) | Conan install → CMake build → 25 unit tests |
 | `docs` | Ubuntu 22.04 | Doxygen — verifies API docs generate without errors |
 
 A C++17 backend service for online movie ticket booking.
@@ -120,12 +120,12 @@ Or run the test binary directly:
 .\build\tests\Release\ticketbook_tests.exe
 ```
 
-22 tests across three areas:
+25 tests across three areas:
 
 | Group | Tests | What is covered |
 |---|---|---|
-| Data queries | 8 | `getMovies`, `getTheatersForMovie`, `getAvailableSeats` — happy path and not-found cases |
-| Booking logic | 8 | Single/multi seat booking, atomicity, already-booked, invalid ID, duplicate in request, no showing |
+| Data queries | 9 | `getMovies`, `getTheatersForMovie` (count + field correctness), `getAvailableSeats` — happy path and not-found cases |
+| Booking logic | 11 | Single/multi seat booking; atomicity on both `SeatAlreadyBooked` and `InvalidSeat` errors; booking all seats leaves theater empty; already-booked, invalid ID, duplicate in request, no showing |
 | Concurrency | 5 | 20 threads racing for the same seat (exactly 1 wins); 20 threads booking distinct seats (all succeed); 16 concurrent readers don't block each other; reader and writer on different showings run in parallel; stress test — 12 threads × 50 iterations targeting 4 hot seats with mixed reads/writes, verifies `successCount == bookedCount` (no over-booking) |
 
 ## API Documentation (Doxygen)
