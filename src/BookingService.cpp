@@ -151,6 +151,14 @@ BookingResult BookingService::bookSeats(
         return {BookingStatus::InvalidSeat, "No seats specified.", {}};
     }
 
+    // Detect duplicates in the input before touching any shared state.
+    auto sorted = seatIds;
+    std::sort(sorted.begin(), sorted.end());
+    if (std::unique(sorted.begin(), sorted.end()) != sorted.end()) {
+        return {BookingStatus::InvalidSeat,
+                "Duplicate seat IDs in request.", {}};
+    }
+
     // showings keys are immutable — find() needs no global lock.
     auto it = m_impl->showings.find(makeKey(movieId, theaterId));
     if (it == m_impl->showings.end()) {
@@ -163,7 +171,9 @@ BookingResult BookingService::bookSeats(
     ShowingData& showing = it->second;
     std::unique_lock lock(showing.mutex);
 
-    // ── Phase 1: validate every seat before touching any ─────────────────────
+    // Phase 1: validate every seat before touching any
+    // Holds pre-converted seatIdToIndex() results so Phase 2 avoids
+    // parsing the seat strings a second time.
     std::vector<int> indices;
     indices.reserve(seatIds.size());
 
@@ -180,15 +190,7 @@ BookingResult BookingService::bookSeats(
         indices.push_back(idx);
     }
 
-    // Detect duplicates within the same request.
-    auto sorted = indices;
-    std::sort(sorted.begin(), sorted.end());
-    if (std::unique(sorted.begin(), sorted.end()) != sorted.end()) {
-        return {BookingStatus::InvalidSeat,
-                "Duplicate seat IDs in request.", {}};
-    }
-
-    // ── Phase 2: commit ───────────────────────────────────────────────────────
+    // Phase 2: commit
     for (const int idx : indices) {
         showing.booked[idx] = true;
     }
