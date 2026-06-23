@@ -21,12 +21,12 @@ Thread-safe, in-memory, no external database required.
 
 ## Prerequisites
 
-| Tool | Version |
-|------|---------|
-| CMake | ≥ 3.15 |
-| C++ compiler | GCC 9 / Clang 10 / MSVC 2019 or later (C++17) |
-| Python | ≥ 3.8 | required only to install Conan via pip |
-| Conan | ≥ 2.0 |
+| Tool | Version | Notes |
+|------|---------|-------|
+| CMake | ≥ 3.15 | |
+| C++ compiler | GCC 9 / Clang 10 / MSVC 2019 or later (C++17) | |
+| Python | ≥ 3.8 | only needed to install Conan via `pip`; not required at runtime |
+| Conan | ≥ 2.0 | |
 
 Install Conan and auto-detect your compiler profile:
 
@@ -42,9 +42,7 @@ conan profile detect
 conan install . --output-folder=build --build=missing -s build_type=Release
 
 # 2. Configure
-cmake -B build \
-      -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake \
-      -DCMAKE_BUILD_TYPE=Release
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
 
 # 3. Build
 cmake --build build --config Release
